@@ -1,3 +1,8 @@
+"""
+Qt navigation bar with breadcrumbs
+Andrey Makarov, 2019
+"""
+
 from pathlib import Path
 import os
 from qtpy import QtWidgets, QtGui, QtCore
@@ -30,7 +35,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         self.completer = QtWidgets.QCompleter(self)  # FIXME:
         self.completer.setModel(QtCore.QStringListModel())
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
-        self.completer.activated.connect(self.__set_path_slot)
+        self.completer.activated.connect(self._set_path_slot)
         self.line_address.setCompleter(self.completer)
         # print(self.line_address.geometry())
         layout.addWidget(self.line_address)
@@ -48,11 +53,13 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         self.btn_crumbs_hidden.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         self.btn_crumbs_hidden.setArrowType(Qt.LeftArrow)
         self.btn_crumbs_hidden.setStyleSheet("QToolButton::menu-indicator { image: none; }")
+        self.btn_crumbs_hidden.hide()
         crumbs_cont_layout.addWidget(self.btn_crumbs_hidden)
         menu = QtWidgets.QMenu(self.btn_crumbs_hidden)  # FIXME:
-        menu.addAction('test1')
-        menu.addAction('test2')
-        menu.addAction('test3')
+        menu.aboutToShow.connect(self._hidden_crumbs_menu_show)
+        # menu.addAction('test1')
+        # menu.addAction('test2')
+        # menu.addAction('test3')
         self.btn_crumbs_hidden.setMenu(menu)
 
         # Container for breadcrumbs
@@ -74,7 +81,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         self.btn_browse.setAutoRaise(True)
         self.btn_browse.setText("...")
         self.btn_browse.setToolTip("Browse for folder")
-        self.btn_browse.clicked.connect(self.__browse_for_folder)
+        self.btn_browse.clicked.connect(self._browse_for_folder)
         layout.addWidget(self.btn_browse)
 
         self.setMaximumHeight(self.line_address.height())  # FIXME:
@@ -82,20 +89,30 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         self.path_ = None
         self.set_path(Path())
 
-    def __browse_for_folder(self):
-        p = QtWidgets.QFileDialog.getExistingDirectory(
+    def _hidden_crumbs_menu_show(self):
+        "SLOT: fill menu with hidden breadcrumbs list"
+        menu = self.sender()
+        menu.clear()
+        crumbs = tuple(self._get_crumbs(visible=False))
+        for i in reversed(crumbs):
+            action = menu.addAction(i.text())
+            action.path = i.path
+            action.triggered.connect(self._set_path_slot)
+
+    def _browse_for_folder(self):
+        path = QtWidgets.QFileDialog.getExistingDirectory(
             self, "Choose folder", str(self.path()))
-        if p:
-            self.set_path(p)
+        if path:
+            self.set_path(path)
 
     def line_address_keyPressEvent(self, event):
         "Actions to take after a key press in text address field"
         if event.key() == Qt.Key_Escape:
             self.line_address.setText(str(self.path()))  # revert changes
-            self.__show_address_field(False)
+            self._show_address_field(False)
         elif event.key() in (Qt.Key_Return, Qt.Key_Enter):
             self.set_path(self.line_address.text())
-            self.__show_address_field(False)
+            self._show_address_field(False)
         elif event.text() == os.path.sep:  # FIXME: separator cannot be pasted
             print('fill completer data here')
             paths = [str(i) for i in
@@ -103,7 +120,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             self.completer.model().setStringList(paths)
         self.line_address.keyPressEvent_super(event)
 
-    def __clear_crumbs(self):
+    def _clear_crumbs(self):
         layout = self.crumbs_panel.layout()
         while layout.count():
             child = layout.takeAt(0)
@@ -111,7 +128,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
                 child.widget().deleteLater()
         # layout.addStretch()
 
-    def __insert_crumb(self, path):
+    def _insert_crumb(self, path):
         btn = QtWidgets.QToolButton(self.crumbs_panel)
         btn.setAutoRaise(True)
         btn.setPopupMode(btn.MenuButtonPopup)
@@ -142,7 +159,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
                     continue
                 action = menu.addAction(i.name)
                 action.path = i
-                action.triggered.connect(self.__set_path_slot)
+                action.triggered.connect(self._set_path_slot)
         except PermissionError:
             self.listdir_error.emit(context_root)
 
@@ -150,9 +167,10 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         "SLOT: Clear sub-dir menu on hide but let action trigger first"
         QtCore.QTimer.singleShot(0, self.sender().clear)
 
-    def __set_path_slot(self, p=None):
+    def _set_path_slot(self, p=None):
         "SLOT: Set path from breadcrumb menu or completer"
-        self.__show_address_field(False)  # FIXME: put here for completer tests
+        self._show_address_field(False)  # FIXME: put here for completer tests
+        # self.resizeEvent(None)  # FIXME:
         self.set_path(p or self.sender().path)
 
     def set_path(self, path):
@@ -171,13 +189,13 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             self.line_address.setText(str(self.path()))  # revert path
             emit_err.emit(path)
             return False
-        self.__clear_crumbs()
+        self._clear_crumbs()
         self.path_ = path
         self.line_address.setText(str(path))
-        self.__insert_crumb(path)
+        self._insert_crumb(path)
         while path.parent != path:
             path = path.parent
-            self.__insert_crumb(path)
+            self._insert_crumb(path)
         # self.crumbs_panel.layout().addStretch()
         return True
 
@@ -189,9 +207,9 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         "EVENT: switch_space mouse clicked"
         if event.button() != Qt.LeftButton:  # left click only
             return
-        self.__show_address_field(True)
+        self._show_address_field(True)
 
-    def __show_address_field(self, b_show):
+    def _show_address_field(self, b_show):
         "Show text address field"
         if b_show:
             self.crumbs_container.hide()
@@ -202,19 +220,44 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             self.line_address.hide()
             self.crumbs_container.show()
 
-    def resizeEvent(self, event):
-        if self.switch_space.width() < 0.1 * self.width():
-            QtCore.QTimer.singleShot(0.1, self.hide_show_crumbs)
+    def _check_space_width(self, shift=0):
+        "Free space should be at least 10% of the bar width"
+        return self.switch_space.width() + shift - 0.1 * self.width()
 
-    def hide_show_crumbs(self):
-        while self.switch_space.width() < 0.1 * self.width():
-            print(self.switch_space.width())
-            layout = self.crumbs_panel.layout()
-            if layout.count() > 1:
-                child = layout.itemAt(0)
-                if child.widget():
-                    child.widget().hide()
-                    layout.update()
+    def resizeEvent(self, event):
+        if self._check_space_width() < 0:  # show less breadcrumbs
+            crumbs = tuple(self._get_crumbs(hidden=False))
+            if len(crumbs) > 1:
+                for widget in crumbs:
+                    widget.hide()
+                    self.btn_crumbs_hidden.show()
+                    if self._check_space_width(widget.width()) >= 0:
+                        break
+        else:  # show more breadcrumbs
+            crumbs = tuple(self._get_crumbs(visible=False))
+            shown = 0
+            for widget in reversed(crumbs):  # show last hidden first
+                if self._check_space_width(-widget.width()) < 0:
+                    break
+                widget.show()
+                shown += 1
+                if shown == len(crumbs):
+                    self.btn_crumbs_hidden.hide()
+        print(
+            self.crumbs_panel.sizeHint(),
+            self.crumbs_container.sizeHint(),
+            self.sizeHint()
+        )
+
+    def _get_crumbs(self, visible=True, hidden=True):
+        "Generator of all/visible/hidden breadcrumbs"
+        layout = self.crumbs_panel.layout()
+        for item in range(layout.count()):
+            widget = layout.itemAt(item).widget()
+            vis_state = widget.isVisible()
+            if visible and vis_state or hidden and not vis_state:
+                yield widget
+
 
 if __name__ == '__main__':
     from qtapp import QtForm
@@ -229,7 +272,7 @@ if __name__ == '__main__':
         def path_err(self, path):
             print('path err', path)
 
-        def __init__(self):
+        def __init__(self):  # pylint: disable=super-init-not-called
             self.address = BreadcrumbsAddressBar()
             self.layout().addWidget(self.address)
             self.address.listdir_error.connect(self.perm_err)
