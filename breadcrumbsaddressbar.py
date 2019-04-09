@@ -18,9 +18,10 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         self.setPalette(pal)
         self.setAutoFillBackground(True)
         self.setFrameShape(self.StyledPanel)
-        self.layout().setContentsMargins(0, 0, 0, 0)
+        self.layout().setContentsMargins(4, 0, 0, 0)
         self.layout().setSpacing(0)
 
+        # Edit presented path textually
         self.line_address = QtWidgets.QLineEdit(self)
         self.line_address.setFrame(False)
         self.line_address.hide()
@@ -34,21 +35,58 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         # print(self.line_address.geometry())
         layout.addWidget(self.line_address)
 
+        # Container for `btn_crumbs_hidden`, `crumbs_panel`, `switch_space`
+        self.crumbs_container = QtWidgets.QWidget(self)
+        crumbs_cont_layout = QtWidgets.QHBoxLayout(self.crumbs_container)
+        crumbs_cont_layout.setContentsMargins(0, 0, 0, 0)
+        crumbs_cont_layout.setSpacing(0)
+        layout.addWidget(self.crumbs_container)
+
+        # Hidden breadcrumbs menu button
+        self.btn_crumbs_hidden = QtWidgets.QToolButton(self)
+        self.btn_crumbs_hidden.setAutoRaise(True)
+        self.btn_crumbs_hidden.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.btn_crumbs_hidden.setArrowType(Qt.LeftArrow)
+        self.btn_crumbs_hidden.setStyleSheet("QToolButton::menu-indicator { image: none; }")
+        crumbs_cont_layout.addWidget(self.btn_crumbs_hidden)
+        menu = QtWidgets.QMenu(self.btn_crumbs_hidden)  # FIXME:
+        menu.addAction('test1')
+        menu.addAction('test2')
+        menu.addAction('test3')
+        self.btn_crumbs_hidden.setMenu(menu)
+
+        # Container for breadcrumbs
         self.crumbs_panel = QtWidgets.QWidget(self)
         crumbs_layout = QtWidgets.QHBoxLayout(self.crumbs_panel)
         crumbs_layout.setContentsMargins(0, 0, 0, 0)
         crumbs_layout.setSpacing(0)
-        layout.addWidget(self.crumbs_panel)
+        crumbs_cont_layout.addWidget(self.crumbs_panel)
+
+        # Clicking on empty space to the right puts the bar into edit mode
+        self.switch_space = QtWidgets.QWidget(self)
+        s_policy = self.switch_space.sizePolicy()
+        s_policy.setHorizontalStretch(1)
+        self.switch_space.setSizePolicy(s_policy)
+        self.switch_space.mouseReleaseEvent = self.switch_space_mouse_up
+        crumbs_cont_layout.addWidget(self.switch_space)
 
         self.btn_browse = QtWidgets.QToolButton(self)
+        self.btn_browse.setAutoRaise(True)
         self.btn_browse.setText("...")
-        # self.btn_browse.clicked.connect(...)  # FIXME:
+        self.btn_browse.setToolTip("Browse for folder")
+        self.btn_browse.clicked.connect(self.__browse_for_folder)
         layout.addWidget(self.btn_browse)
 
         self.setMaximumHeight(self.line_address.height())  # FIXME:
 
         self.path_ = None
         self.set_path(Path())
+
+    def __browse_for_folder(self):
+        p = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "Choose folder", str(self.path()))
+        if p:
+            self.set_path(p)
 
     def line_address_keyPressEvent(self, event):
         "Actions to take after a key press in text address field"
@@ -71,14 +109,15 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             child = layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
-        layout.addStretch()
+        # layout.addStretch()
 
     def __insert_crumb(self, path):
         btn = QtWidgets.QToolButton(self.crumbs_panel)
         btn.setAutoRaise(True)
         btn.setPopupMode(btn.MenuButtonPopup)
+        # FIXME: C:\ has no name. Use rstrip on Windows only?
         crumb_text = path.name or str(path).upper().rstrip(os.path.sep)
-        btn.setText(crumb_text)  # C:\ has no name
+        btn.setText(crumb_text)
         btn.path = path
         btn.clicked.connect(self.crumb_clicked)
         menu = QtWidgets.QMenu(btn)
@@ -146,7 +185,8 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         "Get path displayed in this BreadcrumbsAddressBar"
         return self.path_
 
-    def mouseReleaseEvent(self, event):
+    def switch_space_mouse_up(self, event):
+        "EVENT: switch_space mouse clicked"
         if event.button() != Qt.LeftButton:  # left click only
             return
         self.__show_address_field(True)
@@ -154,13 +194,27 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
     def __show_address_field(self, b_show):
         "Show text address field"
         if b_show:
-            self.crumbs_panel.hide()
+            self.crumbs_container.hide()
             self.line_address.show()
             self.line_address.setFocus()
             self.line_address.selectAll()
         else:
             self.line_address.hide()
-            self.crumbs_panel.show()
+            self.crumbs_container.show()
+
+    def resizeEvent(self, event):
+        if self.switch_space.width() < 0.1 * self.width():
+            QtCore.QTimer.singleShot(0.1, self.hide_show_crumbs)
+
+    def hide_show_crumbs(self):
+        while self.switch_space.width() < 0.1 * self.width():
+            print(self.switch_space.width())
+            layout = self.crumbs_panel.layout()
+            if layout.count() > 1:
+                child = layout.itemAt(0)
+                if child.widget():
+                    child.widget().hide()
+                    layout.update()
 
 if __name__ == '__main__':
     from qtapp import QtForm
