@@ -243,11 +243,6 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
                 shown += 1
                 if shown == len(crumbs):
                     self.btn_crumbs_hidden.hide()
-        print(
-            self.crumbs_panel.sizeHint(),
-            self.crumbs_container.sizeHint(),
-            self.sizeHint()
-        )
 
     def _get_crumbs(self, visible=True, hidden=True):
         "Generator of all/visible/hidden breadcrumbs"
@@ -257,6 +252,9 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             vis_state = widget.isVisible()
             if visible and vis_state or hidden and not vis_state:
                 yield widget
+
+    def minimumSizeHint(self):
+        return QtCore.QSize(0, self.line_address.height())
 
 
 if __name__ == '__main__':
