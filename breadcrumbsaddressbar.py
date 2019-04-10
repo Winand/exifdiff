@@ -32,12 +32,12 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         self.line_address.hide()
         self.line_address.keyPressEvent_super = self.line_address.keyPressEvent
         self.line_address.keyPressEvent = self.line_address_keyPressEvent
+        self.line_address.focusOutEvent = lambda e: self._cancel_edit()
         self.completer = QtWidgets.QCompleter(self)  # FIXME:
         self.completer.setModel(QtCore.QStringListModel())
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
-        self.completer.activated.connect(self._set_path_slot)
+        self.completer.activated.connect(self.set_path)
         self.line_address.setCompleter(self.completer)
-        # print(self.line_address.geometry())
         layout.addWidget(self.line_address)
 
         # Container for `btn_crumbs_hidden`, `crumbs_panel`, `switch_space`
@@ -57,9 +57,6 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         crumbs_cont_layout.addWidget(self.btn_crumbs_hidden)
         menu = QtWidgets.QMenu(self.btn_crumbs_hidden)  # FIXME:
         menu.aboutToShow.connect(self._hidden_crumbs_menu_show)
-        # menu.addAction('test1')
-        # menu.addAction('test2')
-        # menu.addAction('test3')
         self.btn_crumbs_hidden.setMenu(menu)
 
         # Container for breadcrumbs
@@ -97,7 +94,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         for i in reversed(crumbs):
             action = menu.addAction(i.text())
             action.path = i.path
-            action.triggered.connect(self._set_path_slot)
+            action.triggered.connect(self.set_path)
 
     def _browse_for_folder(self):
         path = QtWidgets.QFileDialog.getExistingDirectory(
@@ -108,8 +105,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
     def line_address_keyPressEvent(self, event):
         "Actions to take after a key press in text address field"
         if event.key() == Qt.Key_Escape:
-            self.line_address.setText(str(self.path()))  # revert changes
-            self._show_address_field(False)
+            self._cancel_edit()
         elif event.key() in (Qt.Key_Return, Qt.Key_Enter):
             self.set_path(self.line_address.text())
             self._show_address_field(False)
@@ -126,7 +122,6 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             child = layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
-        # layout.addStretch()
 
     def _insert_crumb(self, path):
         btn = QtWidgets.QToolButton(self.crumbs_panel)
@@ -159,7 +154,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
                     continue
                 action = menu.addAction(i.name)
                 action.path = i
-                action.triggered.connect(self._set_path_slot)
+                action.triggered.connect(self.set_path)
         except PermissionError:
             self.listdir_error.emit(context_root)
 
@@ -167,26 +162,21 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         "SLOT: Clear sub-dir menu on hide but let action trigger first"
         QtCore.QTimer.singleShot(0, self.sender().clear)
 
-    def _set_path_slot(self, p=None):
-        "SLOT: Set path from breadcrumb menu or completer"
-        self._show_address_field(False)  # FIXME: put here for completer tests
-        # self.resizeEvent(None)  # FIXME:
-        self.set_path(p or self.sender().path)
-
-    def set_path(self, path):
+    def set_path(self, path=None):
         """
         Set path displayed in this BreadcrumbsAddressBar
-        Returns `False` if path does not exist.
+        Returns `False` if path does not exist or permission error.
+        Can be used as a SLOT: `sender().path` is used if `path` is `None`)
         """
-        path, emit_err = Path(path), None
+        path, emit_err = Path(path or self.sender().path), None
         try:  # C: -> C:\, folder\..\folder -> folder
             path = path.resolve()
         except PermissionError:
             emit_err = self.listdir_error
         if not path.exists():
             emit_err = self.path_error
+        self._cancel_edit()  # exit edit mode
         if emit_err:  # permission error or path does not exist
-            self.line_address.setText(str(self.path()))  # revert path
             emit_err.emit(path)
             return False
         self._clear_crumbs()
@@ -196,8 +186,13 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         while path.parent != path:
             path = path.parent
             self._insert_crumb(path)
-        # self.crumbs_panel.layout().addStretch()
+        self.resizeEvent(None)  # FIXME: check resizeEvent logic here
         return True
+
+    def _cancel_edit(self):
+        "Set edit line text back to current path and switch to view mode"
+        self.line_address.setText(str(self.path()))  # revert path
+        self._show_address_field(False)  # switch back to breadcrumbs view
 
     def path(self):
         "Get path displayed in this BreadcrumbsAddressBar"
@@ -254,7 +249,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
                 yield widget
 
     def minimumSizeHint(self):
-        return QtCore.QSize(0, self.line_address.height())
+        return QtCore.QSize(150, self.line_address.height())
 
 
 if __name__ == '__main__':
@@ -272,6 +267,9 @@ if __name__ == '__main__':
 
         def __init__(self):  # pylint: disable=super-init-not-called
             self.address = BreadcrumbsAddressBar()
+            b = QtWidgets.QPushButton("test_button_long_text", self)
+            b.setFixedWidth(200)
+            self.layout().addWidget(b)
             self.layout().addWidget(self.address)
             self.address.listdir_error.connect(self.perm_err)
             self.address.path_error.connect(self.path_err)
