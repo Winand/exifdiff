@@ -98,7 +98,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         "SLOT: fill menu with hidden breadcrumbs list"
         menu = self.sender()
         menu.clear()
-        for i in self.l_breadcrumbs[:self._hid_count()]:
+        for i in self.l_breadcrumbs[self._hid_count()-1::-1]:
             action = menu.addAction(i.text())
             action.path = i.path
             action.triggered.connect(self.set_path)
@@ -201,7 +201,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             path = path.parent
             self._insert_crumb(path)
         # self.l_crumbs_visible[-1].setMinimumSize(0, 0)  # FIXME: last piece is resizable?
-        # QtCore.QTimer.singleShot(0, self._show_hide_breadcrumbs)
+        QtCore.QTimer.singleShot(0, self._show_hide_breadcrumbs)
         return True
 
     def _cancel_edit(self):
@@ -281,7 +281,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
                 self.btn_crumbs_hidden.show()
             i, acc_width = -1, 0
             for i in range(self._vis_count()-1):
-                widget = self.l_breadcrumbs[self.first_visible+i]
+                widget = self.l_breadcrumbs[self.first_visible]
                 acc_width += widget.width()
                 widget.hide()
                 self.first_visible += 1
@@ -351,9 +351,10 @@ if __name__ == '__main__':
             print('path err', path)
         
         def b_clicked(self):
-            print(self.address._check_space_width())
-            print([i.width() for i in self.address.l_crumbs_visible])  
-            print([i.minimumSizeHint() for i in self.address.l_crumbs_visible])  
+            pass
+            # print(self.address._check_space_width())
+            # print([i.width() for i in self.address.l_crumbs_visible])  
+            # print([i.minimumSizeHint() for i in self.address.l_crumbs_visible])  
 
         def __init__(self):  # pylint: disable=super-init-not-called
             self.address = BreadcrumbsAddressBar()
