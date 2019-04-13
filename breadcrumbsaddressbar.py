@@ -59,6 +59,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         self.btn_crumbs_hidden.setArrowType(Qt.LeftArrow)
         self.btn_crumbs_hidden.setStyleSheet("QToolButton::menu-indicator {"
                                              "image: none;}")
+        self.btn_crumbs_hidden.setMinimumSize(self.btn_crumbs_hidden.minimumSizeHint())
         self.btn_crumbs_hidden.hide()
         crumbs_cont_layout.addWidget(self.btn_crumbs_hidden)
         menu = QtWidgets.QMenu(self.btn_crumbs_hidden)  # FIXME:
@@ -89,7 +90,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
 
         self.setMaximumHeight(self.line_address.height())  # FIXME:
 
-        self.l_crumbs_hidden, self.l_crumbs_visible = None, None
+        self.first_visible, self.l_breadcrumbs = 0, None
         self.path_ = None
         self.set_path(Path())
 
@@ -97,7 +98,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         "SLOT: fill menu with hidden breadcrumbs list"
         menu = self.sender()
         menu.clear()
-        for i in self.l_crumbs_hidden:
+        for i in self.l_breadcrumbs[:self._hid_count()]:
             action = menu.addAction(i.text())
             action.path = i.path
             action.triggered.connect(self.set_path)
@@ -128,7 +129,8 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             child = layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
-        self.l_crumbs_hidden, self.l_crumbs_visible = [], []  # init
+        # self.l_crumbs_hidden, self.l_crumbs_visible = [], []  # init
+        self.first_visible, self.l_breadcrumbs = 0, []
 
     def _insert_crumb(self, path):
         btn = QtWidgets.QToolButton(self.crumbs_panel)
@@ -146,10 +148,11 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
         menu.setStyleSheet("QMenu { menu-scrollable: 1; }")
         btn.setMenu(menu)
         self.crumbs_panel.layout().insertWidget(0, btn)
-        btn.setMinimumSize(btn.minimumSizeHint())
+        btn.setMinimumSize(btn.minimumSizeHint())  # fixed size breadcrumbs
         # print(self._check_space_width(btn.minimumWidth()))
         # print(btn.size(), btn.sizeHint(), btn.minimumSizeHint())
-        self.l_crumbs_visible.insert(0, btn)
+        # self.l_crumbs_visible.insert(0, btn)
+        self.l_breadcrumbs.insert(0, btn)
 
     def crumb_clicked(self):
         "SLOT: breadcrumb was clicked"
@@ -198,7 +201,7 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             path = path.parent
             self._insert_crumb(path)
         # self.l_crumbs_visible[-1].setMinimumSize(0, 0)  # FIXME: last piece is resizable?
-        QtCore.QTimer.singleShot(0, self._show_hide_breadcrumbs)
+        # QtCore.QTimer.singleShot(0, self._show_hide_breadcrumbs)
         return True
 
     def _cancel_edit(self):
@@ -227,40 +230,101 @@ class BreadcrumbsAddressBar(QtWidgets.QFrame):
             self.line_address.hide()
             self.crumbs_container.show()
 
-    def _check_space_width(self):
-        "Free space should be at least 10% of the bar width"
-        # print('xxx', self.switch_space.width(),
-        # self.switch_space.width() - 0.1 * self.width())
-        return self.switch_space.width() - 0.1 * self.width()
+    # def _check_space_width(self):
+    #     "Free space should be at least 10% of the bar width"
+    #     # print('xxx', self.switch_space.width(),
+    #     # self.switch_space.width() - 0.1 * self.width())
+    #     return self.switch_space.width() - 0.1 * self.width()
+
+    # def _show_hide_breadcrumbs(self):
+    #     space_for_breadcrumbs = self._check_space_width()
+    #     if space_for_breadcrumbs < 0:  # show less breadcrumbs
+    #         while True:
+    #             if len(self.l_crumbs_visible) == 1:
+    #                 break  # do not hide the last one
+    #             widget = self.l_crumbs_visible.pop(0)
+    #             print('hiding', widget.text(), self.switch_space.width(), [i.width() for i in self.l_crumbs_visible])
+    #             widget.hide()
+    #             self.l_crumbs_hidden.insert(0, widget)
+    #             self.btn_crumbs_hidden.show()
+    #             print('hid', self.switch_space.width(), [i.width() for i in self.l_crumbs_visible])
+    #             # print(self._check_space_width(), self.switch_space.width(), self.width())
+    #             if self._check_space_width() >= 0:
+    #                 break
+    #     elif space_for_breadcrumbs > 0 and self.l_crumbs_hidden:
+    #         # show more breadcrumbs
+    #         while True:  # show last hidden first
+    #             widget = self.l_crumbs_hidden.pop(0)
+    #             if self._check_space_width() < widget.width():
+    #                 self.l_crumbs_hidden.insert(0, widget)  # revert
+    #                 break  # free space is too small for a next breadcrumb
+    #             print('showing', widget.text())
+    #             widget.show()
+    #             self.l_crumbs_visible.insert(0, widget)
+    #             if not self.l_crumbs_hidden:
+    #                 self.btn_crumbs_hidden.hide()
+    #                 break
+
+    def _vis_count(self):
+        "Count of visible breadcrumbs"
+        return len(self.l_breadcrumbs) - self.first_visible
+
+    def _hid_count(self):
+        "Count of hidden breadcrumbs"
+        return self.first_visible
 
     def _show_hide_breadcrumbs(self):
-        space_for_breadcrumbs = self._check_space_width()
-        if space_for_breadcrumbs < 0:  # show less breadcrumbs
-            while True:
-                if len(self.l_crumbs_visible) == 1:
-                    break  # do not hide the last one
-                widget = self.l_crumbs_visible.pop(0)
-                print('hiding', widget.text(), self.switch_space.width(), [i.width() for i in self.l_crumbs_visible])
-                widget.hide()
-                self.l_crumbs_hidden.insert(0, widget)
+        free_space = self.switch_space.width() - round(.1 * self.width())
+        if free_space < 0 and self._vis_count() > 1:
+            if not self._hid_count():
+                free_space -= self.btn_crumbs_hidden.width()
                 self.btn_crumbs_hidden.show()
-                print('hid', self.switch_space.width(), [i.width() for i in self.l_crumbs_visible])
-                # print(self._check_space_width(), self.switch_space.width(), self.width())
-                if self._check_space_width() >= 0:
+            i, acc_width = -1, 0
+            for i in range(self._vis_count()-1):
+                widget = self.l_breadcrumbs[self.first_visible+i]
+                acc_width += widget.width()
+                widget.hide()
+                self.first_visible += 1
+                if acc_width + free_space >= 0:
                     break
-        elif space_for_breadcrumbs > 0 and self.l_crumbs_hidden:
-            # show more breadcrumbs
-            while True:  # show last hidden first
-                widget = self.l_crumbs_hidden.pop(0)
-                if self._check_space_width() < widget.width():
-                    self.l_crumbs_hidden.insert(0, widget)  # revert
-                    break  # free space is too small for a next breadcrumb
-                print('showing', widget.text())
+        elif free_space > 0 and self._hid_count():
+            i, acc_width = -1, 0
+            for i in range(self._hid_count()-1, -1, -1):
+                widget = self.l_breadcrumbs[i]
+                acc_width += widget.width()
+                if acc_width > free_space:
+                    break
                 widget.show()
-                self.l_crumbs_visible.insert(0, widget)
-                if not self.l_crumbs_hidden:
+                self.first_visible -= 1
+                if not self.first_visible:
+                    free_space += self.btn_crumbs_hidden.width()
                     self.btn_crumbs_hidden.hide()
-                    break
+
+    # def _show_hide_breadcrumbs(self):
+    #     free_space = self.switch_space.width() - round(.1 * self.width())
+    #     if free_space < 0 and len(self.l_crumbs_visible) > 1:
+    #         if not self.l_crumbs_hidden:
+    #             free_space -= self.btn_crumbs_hidden.width()
+    #         i, acc_width = -1, 0
+    #         for i, wgt in enumerate(self.l_crumbs_visible[:-1]):
+    #             acc_width += wgt.width()
+    #             wgt.hide()
+    #             if acc_width + free_space >= 0:
+    #                 break
+    #         self.l_crumbs_hidden = (list(reversed(self.l_crumbs_visible[:i+1]))
+    #                                 + self.l_crumbs_hidden)
+    #         self.btn_crumbs_hidden.show()
+    #     elif free_space > 0 and self.l_crumbs_hidden:
+    #         i, acc_width = -1, 0
+    #         for i, wgt in enumerate(self.l_crumbs_hidden):
+    #             acc_width += wgt.width()
+    #             if acc_width > free_space:
+    #                 break
+    #             wgt.show()
+    #         self.l_crumbs_visible = (list(reversed(self.l_crumbs_hidden[:i+1]))
+    #                                  + self.l_crumbs_visible)
+    #         if not self.l_crumbs_hidden:
+    #             self.btn_crumbs_hidden.hide()
 
     def resizeEvent(self, event):
         self._show_hide_breadcrumbs()
